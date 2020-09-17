@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset='utf-8' />
+    <title>Electric Power Planning Areas</title>
+    <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+    <link href="https://api.mapbox.com/mapbox-assembly/v0.24.0/assembly.min.css" rel="stylesheet">
+    <link href='https://api.tiles.mapbox.com/mapbox-gl-js/v1.5.1/mapbox-gl.css' rel='stylesheet' />
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class='grid bg-gray-dark absolute h-full w-full'>
+        <div class='col col--12 border-b border--white color-white'>
+            <h1 class='txt-h2 mx36 my24 inline-block'>Electric Power Planning Areas</h1>
+            <p class='fr mr24 mt36'>Source: <a class='link' target='_blank'
+                    href='https://hifld-geoplatform.opendata.arcgis.com/datasets/electric-planning-areas'>Homeland Infrastructure Foundation-Level Data
+                    GIS Datasets</a></p>
+        </div>
+        <div class='col col--12 h-full relative'>
+            <div id='map' class='w-full h-full'></div>
+            <div id='legend'
+                class='w180 bg-white absolute top right mt36 mr18 round shadow-darken10 px12 py12 txt-s none'>
+                <strong class='block mb6 txt-l'>Peak Load (MW)</strong>
+                <ul class='ul mb6'></ul>
+            </div>
+        </div>
+    </div>
+
+    <script async defer src="https://api.mapbox.com/mapbox-assembly/v0.24.0/assembly.js"></script>
+    <script src='https://api.tiles.mapbox.com/mapbox-gl-js/v1.5.1/mapbox-gl.js'></script>
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <script
+        src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v4.5.1/mapbox-gl-geocoder.min.js"></script>
+    <link rel="stylesheet"
+        href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v4.5.1/mapbox-gl-geocoder.css"
+        type="text/css" />
+    <script src="https://cdn.jsdelivr.net/npm/es6-promise@4/dist/es6-promise.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/es6-promise@4/dist/es6-promise.auto.min.js"></script>
+    <script>
+        mapboxgl.accessToken = 'pk.eyJ1IjoiZGhlMjkzIiwiYSI6ImNrOXk0dW84eTA0bGczZWxsZmk3cjF6bjgifQ.XG50Tz8tAQKvW68fVQv3Bg';
+
+        var bounds = [[-135.07, 10.02], [-60.74, 60.53]];
+
+        const map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/dark-v9',
+            center: [2.28, 11.77],
+            zoom: 1.2,
+            maxBounds: bounds
+        });
+
+        map.addControl(
+            new MapboxGeocoder({
+                accessToken: mapboxgl.accessToken,
+                mapboxgl: mapboxgl
+            })
+        );
+
+        map.on('load', () => {
+
+            d3.json('./data/planning_areas.geojson').then((geojson) => {
+                addLayer(geojson);
+                addLegend(geojson);
+                addInteraction(geojson);
+            });
+        });
+
+        function addLayer(geojson) {
+
+            map.addSource('power-data', {
+                type: 'geojson',
+                data: geojson
+            });
+
+            map.fitBounds([-129.07, 23.02, -65.74, 50.53], {
+                padding: {
+                    top: 12, bottom: 18, left: 12, right: 220
+                }
+            });
+
+            const onZoomend = () => {
+
+                map.setMaxBounds(map.getBounds())
+
+                d3.select('#legend').classed('none', false);
+
+                map.off('zoomend', onZoomend);
+            };
+
+            map.on('zoomend', onZoomend);
+
+            map.addLayer({
+                'id': 'epa',
+                'type': 'fill',
+                'source': 'power-data',
+                'paint': {
+                    'fill-color': [
+                        'interpolate',
+                        ['linear'],
+                        ['get', 'PEAK_LOAD'],
+                        0,
+                        '#F2F12D',
+                        18834,
+                        '#EED322',
+                        37668,
+                        '#E6B71E',
+                        75335,
+                        '#DA9C20',
+                        94169,
+                        '#CA8323',
+                        113003,
+                        '#B86B25',
+                        150760,
+                        '#A25626'
+                    ],
+                    'fill-opacity': 0.75
+
+                }
+            });
+        }
+
+        function addLegend(geojson) {
+            var layers = ['0', '18834', '37668', '75335', '94169', '113003', '150760'];
+            var colors = ['#F2F12D', '#EED322', '#E6B71E', '#DA9C20', '#CA8323', '#B86B25', '#A25626'];
+
+            let listItems = '';
+
+            for (i = 0; i < layers.length; i++) {
+                if (layers[i] === "150760") {
+                    listItems += `<li class='li h-full txt-m'>
+                <span class='w24 h18 mt6 fl mr12' 
+                      style='background: ${colors[i]}'>
+                </span>${layers[i]}+</li>`;
+                }
+                else {
+                    listItems += `<li class='li h-full txt-m'>
+                <span class='w24 h18 mt6 fl mr12' 
+                      style='background: ${colors[i]}'>
+                </span>${layers[i]} - ${layers[i + 1]}</li>`;
+                }
+            }
+            d3.select("#legend ul").html(listItems);
+        }
+
+        function addInteraction(geojson) {
+            var popup = new mapboxgl.Popup({
+                closeButton: false,
+                closeOnClick: false
+            });
+            map.on('mousemove', function (e) {
+                var features = map.queryRenderedFeatures(e.point);
+                var energyName = features[0].properties.NAME;
+                var peakLoad = features[0].properties.PEAK_LOAD;
+
+                if (energyName === undefined) {
+
+                }
+                else {
+
+                    var coordinates = (e.lngLat.wrap());
+                    var description = "OPERATED BY " + energyName + "<br>" + peakLoad + " MEGAWATTS AT PEAK";
+                    popup.setLngLat(coordinates).setHTML(description).addTo(map);
+                }
+            });
+
+            map.on('mouseleave', function () {
+                popup.remove();
+            });
+        }
+
+    </script>
+
+</body>
+
+</html>
